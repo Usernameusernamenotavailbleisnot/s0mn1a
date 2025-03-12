@@ -427,7 +427,7 @@ class TokenSwap extends BaseOperation {
     }
   }
   
-  // Approve router to spend PONG tokens (only if needed)
+  // Original method that calculates swap amount each time (which can lead to inconsistency)
   async approvePongForSwap() {
     try {
       // Check if swapping is enabled
@@ -495,7 +495,7 @@ class TokenSwap extends BaseOperation {
     }
   }
   
-  // Swap PONG tokens for PING tokens - Using configurable amount
+  // Original method that calculates swap amount each time (which can lead to inconsistency)
   async swapPongForPing() {
     try {
       // Check if swapping is enabled
@@ -565,7 +565,7 @@ class TokenSwap extends BaseOperation {
     }
   }
   
-  // Approve router to spend PING tokens (only if needed)
+  // Original method that calculates swap amount each time (which can lead to inconsistency)
   async approvePingForSwap() {
     try {
       // Check if swapping is enabled
@@ -633,7 +633,7 @@ class TokenSwap extends BaseOperation {
     }
   }
   
-  // Swap PING tokens for PONG tokens - Using configurable amount
+  // Original method that calculates swap amount each time (which can lead to inconsistency)
   async swapPingForPong() {
     try {
       // Check if swapping is enabled
@@ -703,7 +703,271 @@ class TokenSwap extends BaseOperation {
     }
   }
   
-  // Implementation of the executeOperations method from BaseOperation
+  // *** NEW METHOD: Modified version of approvePongForSwap that accepts pre-calculated amount ***
+  async approvePongForSwapWithAmount(swapAmount) {
+    try {
+      // Check if swapping is enabled
+      if (!this.isSwapEnabled()) {
+        this.logger.info(`Token swapping is disabled in config`);
+        return true; // Return true to not interrupt flow
+      }
+      
+      // Check current allowance
+      const currentAllowance = await this.checkAllowance(
+        constants.TOKEN.PONG_ADDRESS, 
+        constants.TOKEN.ROUTER_ADDRESS
+      );
+      
+      this.logger.info(`Current PONG allowance: ${ethers.formatUnits(currentAllowance, 18)} PONG`);
+      this.logger.info(`Required PONG allowance: ${swapAmount.humanReadable.toFixed(4)} PONG`);
+      
+      // Check if allowance is already sufficient
+      if (BigInt(currentAllowance) >= BigInt(swapAmount.raw)) {
+        this.logger.success(`Existing PONG allowance is sufficient, no approval needed`);
+        return true;
+      }
+      
+      this.logger.info(`🔓 Approving PONG tokens for swap...`);
+      
+      // Add random delay before approval
+      await this.addDelay("approve PONG operation");
+      
+      // Create contract interface for proper ABI encoding
+      const approveInterface = new ethers.Interface([
+        "function approve(address spender, uint256 amount)"
+      ]);
+      
+      // Encode function data properly
+      const data = approveInterface.encodeFunctionData("approve", [
+        constants.TOKEN.ROUTER_ADDRESS,
+        swapAmount.raw
+      ]);
+      
+      // Prepare approve transaction
+      const txObject = {
+        to: constants.TOKEN.PONG_ADDRESS,
+        data: data
+      };
+      
+      // Send approve transaction with retry
+      const result = await this.executeWithRetry(txObject, "PONG token approval");
+      
+      if (!result.success) {
+        this.logger.error(`Failed to approve PONG tokens: ${result.error}`);
+        return false;
+      }
+      
+      this.logger.success(`Successfully approved ${swapAmount.humanReadable.toFixed(4)} PONG tokens for swap`);
+      this.logger.success(`Transaction hash: ${result.txHash}`);
+      this.logger.success(`View on explorer: ${constants.NETWORK.EXPLORER_URL}/tx/${result.txHash}`);
+      
+      return true;
+    } catch (error) {
+      this.logger.error(`Error in PONG token approval: ${error.message}`);
+      return false;
+    }
+  }
+  
+  // *** NEW METHOD: Modified version of swapPongForPing that accepts pre-calculated amount ***
+  async swapPongForPingWithAmount(swapAmount) {
+    try {
+      // Check if swapping is enabled
+      if (!this.isSwapEnabled()) {
+        this.logger.info(`Token swapping is disabled in config`);
+        return true; // Return true to not interrupt flow
+      }
+      
+      this.logger.info(`🔄 Swapping PONG tokens for PING tokens...`);
+      
+      // Add random delay before swap
+      await this.addDelay("swap PONG to PING operation");
+      
+      this.logger.info(`Swap amount: ${swapAmount.humanReadable} PONG (${swapAmount.raw} wei)`);
+      
+      // Get slippage from config
+      const slippage = this.configManager.get ? 
+        this.configManager.getNumber('operations.tokenswap.slippage', 500) :
+        (this.config.operations?.tokenswap?.slippage || 500); // 5.00% in basis points
+      
+      this.logger.info(`Using slippage: ${slippage} basis points (${slippage/100}%)`);
+      
+      // Convert amount to hex without 0x prefix and pad to 64 chars
+      const amountHex = BigInt(swapAmount.raw).toString(16);
+      const paddedAmountHex = this.padHex(amountHex);
+      
+      // Convert slippage to hex and pad
+      const slippageHex = slippage.toString(16);
+      const paddedSlippageHex = this.padHex(slippageHex);
+      
+      // Build data exactly as in the successful transaction
+      const swapData = `0x04e45aaf` + // Function signature
+        `000000000000000000000000${constants.TOKEN.PONG_ADDRESS.slice(2)}` + // tokenIn (PONG)
+        `000000000000000000000000${constants.TOKEN.PING_ADDRESS.slice(2)}` + // tokenOut (PING)
+        `${paddedSlippageHex}` + // slippage (from config)
+        `000000000000000000000000${this.blockchain.address.slice(2)}` + // recipient
+        `${paddedAmountHex}` + // amountIn (from config)
+        `0000000000000000000000000000000000000000000000000000000000000000` + // amountOutMin (0)
+        `0000000000000000000000000000000000000000000000000000000000000000`; // deadline (0)
+      
+      // Prepare swap transaction with fixed gas limit, using 'gas' parameter
+      const txObject = {
+        to: constants.TOKEN.ROUTER_ADDRESS,
+        data: swapData,
+        gas: 500000
+      };
+      
+      // Send swap transaction with retry
+      const result = await this.executeWithRetry(txObject, "PONG to PING swap");
+      
+      if (!result.success) {
+        this.logger.error(`Failed to swap PONG tokens: ${result.error}`);
+        return false;
+      }
+      
+      this.logger.success(`Successfully swapped ${swapAmount.humanReadable.toFixed(4)} PONG tokens for PING tokens`);
+      this.logger.success(`Transaction hash: ${result.txHash}`);
+      this.logger.success(`View on explorer: ${constants.NETWORK.EXPLORER_URL}/tx/${result.txHash}`);
+      
+      return true;
+    } catch (error) {
+      this.logger.error(`Error in PONG to PING swap: ${error.message}`);
+      return false;
+    }
+  }
+  
+  // *** NEW METHOD: Modified version of approvePingForSwap that accepts pre-calculated amount ***
+  async approvePingForSwapWithAmount(swapAmount) {
+    try {
+      // Check if swapping is enabled
+      if (!this.isSwapEnabled()) {
+        this.logger.info(`Token swapping is disabled in config`);
+        return true; // Return true to not interrupt flow
+      }
+      
+      // Check current allowance
+      const currentAllowance = await this.checkAllowance(
+        constants.TOKEN.PING_ADDRESS, 
+        constants.TOKEN.ROUTER_ADDRESS
+      );
+      
+      this.logger.info(`Current PING allowance: ${ethers.formatUnits(currentAllowance, 18)} PING`);
+      this.logger.info(`Required PING allowance: ${swapAmount.humanReadable.toFixed(4)} PING`);
+      
+      // Check if allowance is already sufficient
+      if (BigInt(currentAllowance) >= BigInt(swapAmount.raw)) {
+        this.logger.success(`Existing PING allowance is sufficient, no approval needed`);
+        return true;
+      }
+      
+      this.logger.info(`🔓 Approving PING tokens for swap...`);
+      
+      // Add random delay before approval
+      await this.addDelay("approve PING operation");
+      
+      // Create contract interface for proper ABI encoding
+      const approveInterface = new ethers.Interface([
+        "function approve(address spender, uint256 amount)"
+      ]);
+      
+      // Encode function data properly
+      const data = approveInterface.encodeFunctionData("approve", [
+        constants.TOKEN.ROUTER_ADDRESS,
+        swapAmount.raw
+      ]);
+      
+      // Prepare approve transaction
+      const txObject = {
+        to: constants.TOKEN.PING_ADDRESS,
+        data: data
+      };
+      
+      // Send approve transaction with retry
+      const result = await this.executeWithRetry(txObject, "PING token approval");
+      
+      if (!result.success) {
+        this.logger.error(`Failed to approve PING tokens: ${result.error}`);
+        return false;
+      }
+      
+      this.logger.success(`Successfully approved ${swapAmount.humanReadable.toFixed(4)} PING tokens for swap`);
+      this.logger.success(`Transaction hash: ${result.txHash}`);
+      this.logger.success(`View on explorer: ${constants.NETWORK.EXPLORER_URL}/tx/${result.txHash}`);
+      
+      return true;
+    } catch (error) {
+      this.logger.error(`Error in PING token approval: ${error.message}`);
+      return false;
+    }
+  }
+  
+  // *** NEW METHOD: Modified version of swapPingForPong that accepts pre-calculated amount ***
+  async swapPingForPongWithAmount(swapAmount) {
+    try {
+      // Check if swapping is enabled
+      if (!this.isSwapEnabled()) {
+        this.logger.info(`Token swapping is disabled in config`);
+        return true; // Return true to not interrupt flow
+      }
+      
+      this.logger.info(`🔄 Swapping PING tokens for PONG tokens...`);
+      
+      // Add random delay before swap
+      await this.addDelay("swap PING to PONG operation");
+      
+      this.logger.info(`Swap amount: ${swapAmount.humanReadable} PING (${swapAmount.raw} wei)`);
+      
+      // Get slippage from config
+      const slippage = this.configManager.get ? 
+        this.configManager.getNumber('operations.tokenswap.slippage', 500) :
+        (this.config.operations?.tokenswap?.slippage || 500); // 5.00% in basis points
+      
+      this.logger.info(`Using slippage: ${slippage} basis points (${slippage/100}%)`);
+      
+      // Convert amount to hex without 0x prefix and pad to 64 chars
+      const amountHex = BigInt(swapAmount.raw).toString(16);
+      const paddedAmountHex = this.padHex(amountHex);
+      
+      // Convert slippage to hex and pad
+      const slippageHex = slippage.toString(16);
+      const paddedSlippageHex = this.padHex(slippageHex);
+      
+      // Build data exactly as in the successful transaction
+      const swapData = `0x04e45aaf` + // Function signature
+        `000000000000000000000000${constants.TOKEN.PING_ADDRESS.slice(2)}` + // tokenIn (PING)
+        `000000000000000000000000${constants.TOKEN.PONG_ADDRESS.slice(2)}` + // tokenOut (PONG)
+        `${paddedSlippageHex}` + // slippage (from config)
+        `000000000000000000000000${this.blockchain.address.slice(2)}` + // recipient
+        `${paddedAmountHex}` + // amountIn (from config)
+        `0000000000000000000000000000000000000000000000000000000000000000` + // amountOutMin (0)
+        `0000000000000000000000000000000000000000000000000000000000000000`; // deadline (0)
+      
+      // Prepare swap transaction with fixed gas limit, using 'gas' parameter
+      const txObject = {
+        to: constants.TOKEN.ROUTER_ADDRESS,
+        data: swapData,
+        gas: 500000
+      };
+      
+      // Send swap transaction with retry
+      const result = await this.executeWithRetry(txObject, "PING to PONG swap");
+      
+      if (!result.success) {
+        this.logger.error(`Failed to swap PING tokens: ${result.error}`);
+        return false;
+      }
+      
+      this.logger.success(`Successfully swapped ${swapAmount.humanReadable.toFixed(4)} PING tokens for PONG tokens`);
+      this.logger.success(`Transaction hash: ${result.txHash}`);
+      this.logger.success(`View on explorer: ${constants.NETWORK.EXPLORER_URL}/tx/${result.txHash}`);
+      
+      return true;
+    } catch (error) {
+      this.logger.error(`Error in PING to PONG swap: ${error.message}`);
+      return false;
+    }
+  }
+  
+  // *** NEW IMPLEMENTATION: Modified executeOperations method to ensure consistent amounts ***
   async executeOperations() {
     try {
       // Get repeat count from config
@@ -730,23 +994,35 @@ class TokenSwap extends BaseOperation {
         }
         
         if (this.isSwapEnabled()) {
-          // Approve PONG tokens for swap (only if needed)
-          const pongApproveSuccess = await this.approvePongForSwap();
+          // *** FIX: Pre-calculate swap amounts to ensure consistency ***
+          
+          // Calculate PONG->PING swap amount once and store it
+          const pongSwapAmount = await this.calculateSwapAmount(constants.TOKEN.PONG_ADDRESS);
+          this.logger.info(`Pre-calculated PONG swap amount: ${pongSwapAmount.humanReadable} PONG`);
+          
+          // Approve PONG tokens for swap using the pre-calculated amount
+          const pongApproveSuccess = await this.approvePongForSwapWithAmount(pongSwapAmount);
           if (!pongApproveSuccess) {
             this.logger.warn(`PONG->PING swap may fail due to approval failure`);
+          } else {
+            // Only perform swap if approval was successful
+            // Swap PONG -> PING using the same pre-calculated amount
+            await this.swapPongForPingWithAmount(pongSwapAmount);
           }
           
-          // Swap PONG -> PING
-          await this.swapPongForPing();
+          // Calculate PING->PONG swap amount once and store it
+          const pingSwapAmount = await this.calculateSwapAmount(constants.TOKEN.PING_ADDRESS);
+          this.logger.info(`Pre-calculated PING swap amount: ${pingSwapAmount.humanReadable} PING`);
           
-          // Approve PING tokens for swap (only if needed)
-          const pingApproveSuccess = await this.approvePingForSwap();
+          // Approve PING tokens for swap using the pre-calculated amount
+          const pingApproveSuccess = await this.approvePingForSwapWithAmount(pingSwapAmount);
           if (!pingApproveSuccess) {
             this.logger.warn(`PING->PONG swap may fail due to approval failure`);
+          } else {
+            // Only perform swap if approval was successful
+            // Swap PING -> PONG using the same pre-calculated amount
+            await this.swapPingForPongWithAmount(pingSwapAmount);
           }
-          
-          // Swap PING -> PONG
-          await this.swapPingForPong();
         }
         
         successCount++;
