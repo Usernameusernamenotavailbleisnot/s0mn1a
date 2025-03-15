@@ -28,6 +28,7 @@ class OperationRegistry {
     const Batch = require('./batch');
     const TokenSwap = require('./tokenswap');
     const Faucet = require('./faucet');
+    const Memcoin = require('./memcoin'); // Import the new Memcoin operation
     
     // Initialize with shared blockchain instance
     this.operations = [
@@ -38,6 +39,10 @@ class OperationRegistry {
       { 
         name: "tokenswap", 
         instance: new TokenSwap(this.blockchain, this.config) 
+      },
+      { 
+        name: "memcoin", 
+        instance: new Memcoin(this.blockchain, this.config) 
       },
       { 
         name: "transfer", 

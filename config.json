@@ -31,6 +31,14 @@
         "gas_increase": 1.2
       }
     },
+    "memcoin": {
+      "enabled": false,
+      "mint_enabled": false,
+      "buy_amount": 1,
+      "sell_amount": 0.1,
+      "slippage": 500,
+      "repeat_times": 1
+    },
     "transfer": {
       "enabled": false,
       "use_percentage": false,
@@ -97,10 +105,10 @@
   "general": {
     "gas_price_multiplier": 1.05,
     "max_retries": 1,
-    "base_wait_time": 5,
+    "base_wait_time": 2,
     "delay": {
-      "min_seconds": 5,
-      "max_seconds": 30
+      "min_seconds": 1,
+      "max_seconds": 2
     },
     "log_level": "info"
   },
@@ -115,6 +123,6 @@
   "randomization": {
     "enable": false,
     "excluded_operations": ["faucet"],
-    "operations_to_run": ["faucet", "tokenswap", "transfer", "contract_deploy", "contract_testing", "erc20", "nft", "batch_operations"]
+    "operations_to_run": ["faucet", "memcoin", "tokenswap", "transfer", "contract_deploy", "contract_testing", "erc20", "nft", "batch_operations"]
   }
 }
