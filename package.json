@@ -1,0 +1,42 @@
+{
+    "name": "s0mn1a-automation",
+    "version": "2.0.0",
+    "description": "Advanced automation tool for s0mn1a Testnet",
+    "main": "src/index.js",
+    "scripts": {
+      "start": "node src/index.js",
+      "lint": "eslint .",
+      "test": "jest"
+    },
+    "keywords": [
+      "blockchain",
+      "ethereum",
+      "testnet",
+      "s0mn1a",
+      "automation"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+      "axios": "^1.6.2",
+      "chalk": "^4.1.2",
+      "commander": "^11.1.0",
+      "conf": "^11.0.2",
+      "ethers": "^6.9.0",
+      "figlet": "^1.7.0",
+      "https-proxy-agent": "^7.0.2",
+      "inquirer": "^8.2.6",
+      "lodash": "^4.17.21",
+      "ora": "^5.4.1",
+      "solc": "^0.8.21",
+      "socks-proxy-agent": "^8.0.2",
+      "winston": "^3.11.0"
+    },
+    "devDependencies": {
+      "eslint": "^8.55.0",
+      "jest": "^29.7.0"
+    },
+    "engines": {
+      "node": ">=14.0.0"
+    }
+  }
